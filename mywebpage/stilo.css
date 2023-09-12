@@ -1,3 +1,10 @@
+@media screen and (max-width: 900px)
+{
+    main
+    {
+	margin: 4em 1em; 
+    }
+}
 :root {
 	--teksta-koloro: #070d0d;
 	--fona-koloro: #e7f2f3;
