@@ -1,0 +1,15 @@
+body {
+    margin: 1em 2em;
+}
+
+h2 {
+    color: limegreen;
+}
+
+a {
+    color: royalblue
+}
+
+a.disabled {
+    color: red
+}
