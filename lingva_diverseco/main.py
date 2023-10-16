@@ -2,6 +2,7 @@ import re
 import random
 import csv
 from copy import deepcopy
+from itertools import permutations
 
 def opciaj_demandoj(nomo: str):
     tipo = tipo_el_nomo(nomo)
@@ -19,6 +20,8 @@ def opciaj_demandoj(nomo: str):
             rezulto.append(deepcopy(opcia_demando(obj, tipo, t)))
         return rezulto
     for t in obj:
+        if t == "Loko":
+            continue
         if obj[t] != None and t != tipo:
             rezulto.append(deepcopy(opcia_demando(obj, tipo, t)))
         if obj[t] != None and t == tipo:
@@ -26,32 +29,27 @@ def opciaj_demandoj(nomo: str):
     return rezulto
 
 def entajpaj_demandoj(obj: dict):
-    tipo = None
-    nomo = None
+    nomo, tipo = nomo_k_tipo_el_objekto(obj)
+    negrava_praulo = nomo.startswith("*")
+    nomo = normaligi(nomo, (tipo != "Familio"))
     respondo = ""
     entajpendajxo = "r:^("
-    negrava_praulo = False
     for t in tipoj:
-        if obj[t] != None:
-            if tipo != None:
-                #print(obj, t, tipo)
-                ara_nomo = obj[t]
-                #print(ara_nomo)
-                if respondo != "":
-                    respondo += "<br>"
-                respondo += normaligi(ara_nomo, True)
-                if negrava_praulo:
-                    entajpendajxo += '(' + varianta_regespo(ara_nomo) + ')?'
-                else:
-                    if respondo == "Афразийская макросемья":
-                        entajpendajxo += "^"
-                    entajpendajxo += varianta_regespo(ara_nomo)
-                negrava_praulo = ara_nomo.startswith("*")
-            else:
-                tipo = t
-                nomo = obj[tipo]
-                negrava_praulo = nomo.startswith("*")
-                nomo = normaligi(nomo, (tipo != "Familio"))
+        if obj[t] == None:
+            continue
+        if t == tipo:
+            continue
+        ara_nomo = obj[t]
+        if respondo != "":
+            respondo += "<br>"
+        respondo += normaligi(ara_nomo, True)
+        if negrava_praulo:
+            entajpendajxo += '(' + varianta_regespo(ara_nomo) + ')?'
+        else:
+            if respondo == "Афразийская макросемья":
+                entajpendajxo += "^"
+            entajpendajxo += varianta_regespo(ara_nomo)
+        negrava_praulo = ara_nomo.startswith("*")
     entajpendajxo += ")$"
     if respondo == "" and tipo == "Lingvo":
         respondo = "Язык-изолят"
@@ -66,6 +64,31 @@ def entajpaj_demandoj(obj: dict):
         return []
     return [{
         "Demando": nomo if tipo != "Familio" else f"Относится ли {nomo} к афразийской макросемье?",
+        "Respondo": respondo,
+        "Entajpendajxo": entajpendajxo
+    }]
+
+def lokaj_demandoj(obj: dict):
+    if obj["Loko"] == None:
+        return []
+    nomo, tipo = nomo_k_tipo_el_objekto(obj)
+    nomo = normaligi(nomo, True)
+    respondo = ""
+    loko = obj["Loko"]
+    respondo = re.sub(r'\((север|юг|запад|восток|=.+?)\)', '', loko)
+    respondo = re.sub(r'\s+(?=[^А-Яа-я(])', '', respondo)
+    if ';' in respondo:
+        respondoj = [("{" + r + "}") for r in respondo.split('; ')]
+        respondo = ', '.join(respondoj)
+        entajpendajxoj = [f"({entajpendajxo_el_loko(l)})" for l in loko.split('; ')]
+        cxiuj_ordoj = list(permutations(entajpendajxoj))
+        cxiuj_ordoj = ['+'.join(ordo) + '+' for ordo in cxiuj_ordoj]
+        entajpendajxo = '|'.join(cxiuj_ordoj)
+    else:
+        entajpendajxo = entajpendajxo_el_loko(loko)
+    entajpendajxo = "r:^(" + entajpendajxo + ")+$"
+    return [{
+        "Demando": nomo,
         "Respondo": respondo,
         "Entajpendajxo": entajpendajxo
     }]
@@ -126,6 +149,40 @@ def vortigo_de_demando(nomo: str, tipo: str, cela_tipo: str):
         frazo = f"К какой языковой семье относ{'ит' if nombro_de_parolajxo=='s' else 'ят'}ся {nomo}?"
     return frazo
 
+def entajpendajxo_el_loko(loko: str):
+    rezulto = loko.replace(', ', '|').replace(' и ', '|').lower()
+    #rezulto = re.sub(r'([^|]+)', r'(\1)', rezulto)
+    rezulto = rezulto.replace('|др.', '')
+    rezulto = re.sub(r'([^,|]+)\((север|юг|запад|восток)\)', genitivo_regespo, rezulto)
+    rezulto = re.sub(r'(север|юг|запад|восток) ([^,]+?)\(=(.+?)\)', r'\1 \2(=\1 \3)', rezulto)
+    rezulto = re.sub(r'\(=?(.+?)\)', r'|\1', rezulto)
+    rezulto = rezulto.replace('республика', '(республика)?')
+    rezulto = rezulto.replace('ские острова', '(ские острова|ы)')
+    rezulto = re.sub('(?<!ские)остров', '(остров)?', rezulto)
+    rezulto = re.sub(r'(север|юг)о-(запад|восток)', r'((\1о)?\2|\1)', rezulto)
+    rezulto = re.sub(r'([б-джзк-нп-тф-щ])\1', r'\1+', rezulto)
+    rezulto = rezulto.replace('ё', '[её]')
+    rezulto = re.sub(r'[^а-яё|()\[\]?+]', r'', rezulto)
+    return rezulto.upper()
+
+def genitivo_regespo(trovo):
+    loknomo = trovo.group(1)
+    flanko = trovo.group(2)
+    return loknomo + '|' + flanko + genitivo(loknomo)
+
+def genitivo(linio: str):
+    vortoj = re.findall(r"[А-Яа-я-]+", linio)
+    for v in vortoj:
+        vg = re.sub(r'ый$', 'ого', v)
+        vg = re.sub(r'кий$', 'кого', vg)
+        vg = re.sub(r'ий$', 'его', vg)
+        vg = re.sub(r'я$', 'и', vg)
+        vg = re.sub(r'(?<=[шжчщ])а$', 'и', vg)
+        vg = re.sub(r'а$', 'ы', vg)
+        vg = re.sub(r'([б-джзк-нп-тф-щ])$', r'\1а', vg)
+        linio = linio.replace(v, vg)
+    return linio
+        
 def opcia_demando(objekto: dict, tipo: str, cela_tipo: str):
     nomo = objekto[tipo]
     if (cela_tipo == "Makrofamilio"):
@@ -175,13 +232,6 @@ def opcia_demando(objekto: dict, tipo: str, cela_tipo: str):
         "Opcioj": opcioj
     }
 
-def lasi_gxis(tipo: str):
-    for t in tipoj:
-        if t == tipo:
-            break
-        if nuna_etapo[t] != None:
-            nuna_etapo[t] = None
-
 def normaligi(nomo: str, ekmajusklo: bool = False):
     if nomo.startswith("*"):
         nomo = nomo[1:]
@@ -214,6 +264,15 @@ def tipo_el_nomo(nomo: str):
     else:
         return "Lingvo"
 
+def nomo_k_tipo_el_objekto(obj: dict):
+    for t in tipoj:
+        if obj[t] == None:
+            continue
+        tipo = t
+        nomo = obj[tipo]
+        break
+    return (nomo, tipo)
+
 def eligi_demandon(dem):
     print(f"[?] {dem['Demando']}")
     if 'Opcioj' in dem:
@@ -223,17 +282,19 @@ def eligi_demandon(dem):
         print(f"    [La ĝusta respondo] {dem['Respondo']}")
         print(f"    [Entajpa esprimo] {dem['Entajpendajxo']}")
 
-def strukturigo(parolajxoj: list):
+def strukturigo(parolajxoj: list, loko: str = None):
     rezulto = {t: None for t in reversed(tipoj)}
     for nomo in parolajxoj:
         tipo = tipo_el_nomo(nomo)
         rezulto[tipo] = nomo
+    rezulto["Loko"] = loko
     return rezulto
 
 tipoj = ["Dialekto", "Lingvo", "Subgrupo", "Grupo", "Branĉo", "Familio", "Makrofamilio"]
 
 nunaj_parolajxoj = []
 listaro = {t+"j": [] for t in reversed(tipoj)}
+listaro["Lokhavaj"] = []
 ekster_la_makrofamilio = {t+"j": 0 for t in tipoj if t != "Makrofamilio"}
 
 maksimuma_opciaro = 5
@@ -244,10 +305,18 @@ with open('genealogio.tsv', encoding='utf-8') as d:
         if trovo is None:
             continue
         nunaj_parolajxoj = nunaj_parolajxoj[:trovo.start()]
+        loko = re.findall(r'(?<=\[).+?(?=\])', linio)
+        if loko != []:
+            loko = loko[0]
+        else:
+            loko = None
         nomo = purigi(linio)
         tipo = tipo_el_nomo(nomo)
         nunaj_parolajxoj.append(nomo)
-        listaro[tipo+"j"].append(deepcopy(strukturigo(nunaj_parolajxoj)))
+        objekto = strukturigo(nunaj_parolajxoj, loko)
+        listaro[tipo+"j"].append(deepcopy(objekto))
+        if loko != None:
+            listaro["Lokhavaj"].append(deepcopy(objekto))
         if nunaj_parolajxoj[0] != "афразийская макросемья": ekster_la_makrofamilio[tipo+"j"] += 1
 
 demandaro = []
@@ -262,8 +331,8 @@ with open("demandaro.tsv", encoding='utf-8', mode="w", newline='') as tsv_dosier
     writer.writerow(["QUESTION", "CORRECT"] + ["CHOICE"] * maksimuma_opciaro)
     for dem in demandaro:
         writer.writerow([dem["Demando"], 1] + dem["Opcioj"])
-for i in range(5):
-    eligi_demandon(random.choice(demandaro))
+#for i in range(5):
+    #eligi_demandon(random.choice(demandaro))
 
 demandaro = []
 for t in tipoj:
@@ -278,8 +347,23 @@ with open("demandaro_entajpa.tsv", encoding='utf-8', mode="w", newline='') as ts
     writer.writerow(["Вопрос", "Генеалогическая принадлежность", "", ""])
     for dem in demandaro:
         writer.writerow([dem["Demando"], dem["Respondo"], "N", dem["Entajpendajxo"]])
+#for i in range(5):
+    #eligi_demandon(random.choice(demandaro))
+
+demandaro = []
+for p in listaro["Lokhavaj"]:
+    dem = lokaj_demandoj(p)
+    if len(dem) == 0:
+        print(f"Eraro dum kreado de lokaj demandoj! {t}: {p[t]}")
+    demandaro = demandaro + dem
+with open("demandaro_loka.tsv", encoding='utf-8', mode="w", newline='') as tsv_dosiero:
+    writer = csv.writer(tsv_dosiero, delimiter='\t', lineterminator='\n')
+    writer.writerow(["HINT", "ANSWER", "ISNAME", "TYPEIN"])
+    writer.writerow(["Вопрос", "Ареал распространения", "", ""])
+    for dem in demandaro:
+        writer.writerow([dem["Demando"], dem["Respondo"], "N", dem["Entajpendajxo"]])
 for i in range(5):
     eligi_demandon(random.choice(demandaro))
-    
+print(len(demandaro))
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
