@@ -21,7 +21,7 @@ for book in range(1, book_count + 1):
         text = text.upper()
         for number_of_spaces in range(max_words_in_spell-1, -1, -1):
             for spell in spells[number_of_spaces]:
-                text = re.sub(r"\b" + re.escape(spell.upper()) + r"\b", spell.replace(" ", "-"), text)
+                text = re.sub(r"\b" + re.escape(spell.upper()) + r"\b", spell.replace(" ", ""), text)
         text = re.sub(r"[A-Z0-9]+", "*", text)
     with open(f"results/JKR_HP{book}.txt", "w") as f:
         f.write(text)
